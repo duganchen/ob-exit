@@ -10,15 +10,20 @@ setapi("QString", 2)
 setapi("QUrl", 2)
 
 from PyQt4.QtGui import QApplication, QDialog, QHBoxLayout, QPushButton
-from PyQt4.QtCore import QObject, pyqtSignal
+from PyQt4.QtCore import QObject, QSharedMemory, pyqtSignal
 import subprocess
 import sys
 
 
 def main():
     app = QApplication(sys.argv)
-    dialog = ExitDialog(ExitGUI(), ExitPresenter())
-    dialog.show()
+
+    # Prevent more than one instance from running at once
+    lock = QSharedMemory('ob-exit')
+
+    if lock.create(1):
+        dialog = ExitDialog(ExitGUI(), ExitPresenter())
+        dialog.show()
     sys.exit(app.exec_())
 
 
