@@ -21,12 +21,8 @@ def main():
     # Prevent more than one instance from running at once
     lock = QSharedMemory('ob-exit')
     if lock.create(1):
-        lock.attach()
-        try:
-            dialog = ExitDialog(ExitGUI(), ExitPresenter())
-            dialog.show()
-        finally:
-            lock.detach()
+        dialog = ExitDialog(ExitGUI(), ExitPresenter())
+        dialog.show()
         sys.exit(app.exec_())
 
 
