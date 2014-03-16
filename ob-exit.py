@@ -21,7 +21,7 @@ def main():
     # Prevent more than one instance from running at once
     lock = QSharedMemory('ob-exit')
     if lock.create(1):
-        dialog = ExitDialog(ExitGUI(), ExitPresenter())
+        dialog = ExitDialog(ExitGUI(), ExitPresenter(lock))
         dialog.show()
         sys.exit(app.exec_())
 
@@ -83,10 +83,16 @@ class ExitGUI(QDialog):
 
 
 class ExitPresenter(QObject):
-    def __init__(self, parent=None):
+    def __init__(self, lock, parent=None):
         super(ExitPresenter, self).__init__(parent)
+        self.__lock = lock
 
     def logout(self):
+        # Release the lock. Without this, you won't be able to run ob-exit
+        # again after logging out.
+        self.__lock.deleteLater()
+        QApplication.processEvents()
+
         subprocess.call(['openbox', '--exit'])
 
     def reboot(self):
