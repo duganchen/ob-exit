@@ -21,25 +21,14 @@ def main():
     # Prevent more than one instance from running at once
     lock = QSharedMemory('ob-exit')
     if lock.create(1):
-        dialog = ExitDialog(ExitGUI(), ExitPresenter(lock))
-        dialog.show()
-        sys.exit(app.exec_())
-
-
-class ExitDialog(QObject):
-
-    def __init__(self, view, presenter, parent=None):
-        super(ExitDialog, self).__init__(parent)
-        presenter.setParent(view)
-
+        view = ExitGUI()
+        presenter = ExitPresenter(lock, view)
         view.logout.connect(presenter.logout)
         view.reboot.connect(presenter.reboot)
         view.poweroff.connect(presenter.poweroff)
-
-        self._view = view
-
-    def show(self):
-        self._view.show()
+        view.closed.connect(presenter.releaseLock)
+        view.show()
+        sys.exit(app.exec_())
 
 
 class ExitGUI(QDialog):
@@ -47,6 +36,8 @@ class ExitGUI(QDialog):
     logout = pyqtSignal()
     reboot = pyqtSignal()
     poweroff = pyqtSignal()
+
+    closed = pyqtSignal()
 
     def __init__(self, parent=None):
         super(ExitGUI, self).__init__(parent)
@@ -72,6 +63,10 @@ class ExitGUI(QDialog):
 
         self.setLayout(layout)
 
+    def closeEvent(self, event):
+        self.closed.emit()
+        super(ExitGUI, self).closeEvent(event)
+
     def _signalLogout(self):
         self.logout.emit()
 
@@ -82,30 +77,40 @@ class ExitGUI(QDialog):
         self.poweroff.emit()
 
 
-class ExitPresenter(QObject):
-    def __init__(self, lock, parent=None):
-        super(ExitPresenter, self).__init__(parent)
+class ExitPresenter(object):
+    def __init__(self, lock, view):
         self.__lock = lock
+        self.__view = view
 
     def logout(self):
-        # Release the lock. Without this, you won't be able to run ob-exit
-        # again after logging out.
-        self.__lock.deleteLater()
-        QApplication.processEvents()
-
+        self.releaseLock()
         subprocess.call(['openbox', '--exit'])
 
     def reboot(self):
+        self.releaseLock()
         subprocess.call(['dbus-send', '--system', '--print-reply',
                          '--dest=org.freedesktop.ConsoleKit',
                          '/org/freedesktop/ConsoleKit/Manager',
                          'org.freedesktop.ConsoleKit.Manager.Restart'])
 
     def poweroff(self):
+        self.releaseLock()
         subprocess.call(['dbus-send', '--system', '--print-reply',
                          '--dest=org.freedesktop.ConsoleKit',
                          '/org/freedesktop/ConsoleKit/Manager',
                          'org.freedesktop.ConsoleKit.Manager.Stop'])
+
+    def releaseLock(self):
+
+        # If we're releasing the lock, we're locking the UI while we close
+        # it.
+        self.__view.setEnabled(False)
+
+        # Release the lock that prevents more than one instance from running at
+        # a time. Note that this is slightly more complex than in C++, due to
+        # the lack of a delete operator.
+        self.__lock.deleteLater()
+        QApplication.processEvents()
 
 
 if __name__ == '__main__':
